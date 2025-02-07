@@ -18,7 +18,7 @@ def _interpolate_direction(fp,n):
     '''
     Linear interpolation of directions.
     '''
-    x = np.linspace(0,360,n+1)[:-1]
+    x = np.linspace(0,360,n,endpoint=False)
     return interp1d(fp,fp,kind="linear",fill_value="extrapolate")(x)
     
 def _interpolate_cubic(fp,n):
