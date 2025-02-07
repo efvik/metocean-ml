@@ -1,32 +1,18 @@
 import numpy as np
 import pandas as pd
-import xarray as xr
-import geopy
-import geopy.distance
-import spectra_tools
 import geopandas as gpd
 import contextily as ctx
-import scipy
 import matplotlib.pyplot as plt
-import seaborn as sns
 import matplotlib.colors as mcolors
 import pyproj
 import shapely
-import geographiclib
-import rasterio
-import h5py
-import rasterio.transform
-import os
+from tqdm import tqdm
+from . import spectra_tools
 
 from roaring_landmask import RoaringLandmask
 from roaring_landmask import LandmaskProvider
 provider = LandmaskProvider.Osm
 landmask = RoaringLandmask.new_with_provider(provider)
-
-from affine import Affine
-from shapely.geometry import Point
-from global_land_mask import globe
-from tqdm import tqdm
 
 def is_land(lat,lon):
     '''
@@ -54,7 +40,7 @@ def haversine_distances_pairwise(lat0,lon0,lat1,lon1):
     Returns:
     --------
     distances : array
-        Arc length, multiply by earth radius ~6378 to get km.
+        Arc length, multiply by earth radius ~6371 to get km.
     '''
 
     lat0 = np.radians(lat0)
@@ -87,7 +73,7 @@ def haversine_distances(lat0,lon0,lat1,lon1):
         Array with shape (N_0, N_1) representing the arc distance
         from each point in the first set to each in the second,
         where N_0 = lat0.size = lon0.size and N_1 = lat1.size = lon1.size.
-        Multiply by earth's radius (6378km) to get distance.
+        Multiply by earth's radius (6371km) to get distance.
     '''
     lat0 = np.array(lat0)
     lon0 = np.array(lon0)
@@ -236,13 +222,20 @@ def line_of_sight_plot(center_lat,
     return fig,ax
 
 def calculate_bearing(lat0, lon0, lat1, lon1):
-    '''Get bearing from point 0 towards point 1, in degrees clockwise from north.'''
-    return geographiclib.geodesic.Geodesic.WGS84.Inverse(lat0,lon0,lat1,lon1)["azi1"] % 360
+    '''
+    Get bearing from point 0 towards point 1, in degrees clockwise from north.
+    Reference: https://www.igismap.com/formula-to-find-bearing-or-heading-angle-between-two-points-latitude-longitude/
+    '''
+
+    X = np.cos(lat1) * np.sin(lon1-lon0)
+    Y = np.cos(lat0) * np.sin(lat1) - np.sin(lat0) * np.cos(lat1) * np.cos(lon1-lon0)
+    
+    return np.atan2(X,Y)
 
 def calculate_distance(lat0,lon0,lat1,lon1):
     '''Get distance from each point in (lon0,lat0) to each point in (lon1,lat1), in km.'''
 
-    return np.squeeze(haversine_distances(lat0,lon0,lat1,lon1))*6378
+    return np.squeeze(haversine_distances(lat0,lon0,lat1,lon1))*6371
 
 def distribute_points(lat0:float,
                       lon0:float,
@@ -271,16 +264,18 @@ def distribute_points(lat0:float,
         Each array is the shape (n_bearings, n_distances).
     '''
     
-    if hasattr(lat0,'__len__') or (lat0<-90) or (lat0>90): 
-        raise ValueError(f'Expected {-90}<lat<{90}, got {lat0}.')
-    if hasattr(lon0,'__len__') or (lon0<-180) or (lon0>180): 
-        raise ValueError(f'Expected {-180}<lon<{180}, got {lon0}.')
-    
     lat0 = np.radians(lat0)
     lon0 = np.radians(lon0)
     bearing = np.radians(np.array(bearing)%360)
-    
-    distance = np.array(distance)/6371 # earth average radius
+
+    if (lat0.size != 1) or (lon0.size != 1):
+        raise TypeError('Input lat and lon should be floats, not arrays.')
+    if lat0>90 or lat0<-90:
+        raise ValueError(f'Expected -90<lat<90, got {lat0}.')
+    if lon0>180 or lon0<-180:
+        raise ValueError(f'Expected -180<lon<180, got {lat0}.')
+
+    distance = np.array(distance)/6371000 # earth average radius [m]
     bearing,distance = np.meshgrid(bearing,distance,indexing='ij')
     
     lat1 = np.arcsin( np.sin(lat0)*np.cos(distance) + np.cos(lat0)*np.sin(distance)*np.cos(bearing))
@@ -289,11 +284,13 @@ def distribute_points(lat0:float,
     return np.degrees(lat1), np.degrees(lon1)
 
 def get_fetch(
-    center_lat,
-    center_lon,
+    lat,
+    lon,
     directions=360,
-    max_fetch=1000,
-    step_size=0.01):
+    step_size_minor=10,
+    step_size_major=1e4,
+    verbose = False
+    ):
     '''
     Calculate the fetch distance for all directions,
     for a given lat/lon point.
@@ -305,11 +302,14 @@ def get_fetch(
     center_lon : float
         The longitude of the point of interest.
     directions : int
-        Number of directions.
+        Number of directions, these will be uniformly distributed starting from 0.
     max_fetch : int
-        Maximum distance [km] to check for land.
+        Maximum distance [m] to check for land.
     step_size : float
-        Interval of points [km] to check for land.
+        Interval of points [m] to check for land.
+    verbose : bool
+        Print feedback for each iteration.
+        
         
     Returns:
     --------
@@ -317,13 +317,33 @@ def get_fetch(
         Series of fetch distances by direction.
     '''
     
+    if is_land(lat,lon): raise ValueError(f'Point {lat},{lon} is on land.')
+
+    # List of directions to search and respective fetch distance (to be filled)
     directions = np.linspace(0,360,directions,endpoint=False)
-    distances = np.arange(0,max_fetch,step_size)
-    lat,lon = distribute_points(center_lat,center_lon,directions,distances)
-    land = is_land(lat,lon)
-    if np.any(land[:,0]): raise ValueError(f'Point {center_lat},{center_lon} is on land.')
-    fetch = np.argmax(land,axis=1)
-    fetch[fetch==0] = land.shape[1]
-    fetch = fetch * step_size
+    fetch = np.zeros_like(directions)
+
+    search_offset = 0
+    while np.any(fetch==0):
+        if verbose: print('Iteration {}: Searching {} directions from {} to {} m.'.format(
+                search_offset//step_size_major, np.count_nonzero(fetch==0),
+                search_offset,search_offset+step_size_major))
+
+        # Distances from center point, we search in bloks e.g. [0,1e4), then [1e4, 2*1e4) etc.
+        distances = np.arange(search_offset,search_offset+step_size_major,step_size_minor)
+
+        # Distribute points only in directions where we haven't found fetch yet
+        lats,lons = distribute_points(lat,lon,directions[fetch==0],distances)
+        land = is_land(lats,lons)
+
+        # Fetch is calculated relative to the block we are searching
+        offset_fetch = np.argmax(land,axis=1)*step_size_minor
+
+        # Then nonzero entries (fetch) are increased with the block offset
+        offset_fetch[offset_fetch!=0] = offset_fetch[offset_fetch!=0] + search_offset
+
+        # Offset fetch (zero and nonzero entries) are added to the overall fetch vector
+        fetch[fetch==0] = offset_fetch
+        search_offset += step_size_major
 
     return pd.Series(data=fetch,index=directions,name='Fetch').rename_axis('Direction')
