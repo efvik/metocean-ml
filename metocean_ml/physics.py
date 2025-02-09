@@ -6,7 +6,7 @@ def dirmag_to_uv(wind_direction, wind_speed, going_to=True):
     Get wind x (east) and y (north) component 
     from speed and direction (degrees, default: going to).
 
-    Arguments
+    Parameters
     ---------
     wind_direction : np.ndarray
         Wind direction (degrees)
@@ -30,7 +30,7 @@ def uv_to_dirmag(u, v, going_to=True):
     Get direction (degrees, default: going to) and magnitude 
     from u (east) and v (north) components.
 
-    Arguments
+    Parameters
     ---------
     u : np.ndarray
         Eastwards velocity
@@ -53,7 +53,7 @@ def direct_fetch(fetch:pd.Series,
     '''
     Calculate the direct fetch, i.e. in the wind direction.
 
-    Arguments
+    Parameters
     ----------
     fetch : pd.Series
         Series containing fetch, with direction as index labels.
@@ -82,7 +82,7 @@ def effective_fetch(fetch:pd.Series,
     Calculate the effective fetch by a cos^2-weight.
     Reference: SPM (1966).
 
-    Arguments
+    Parameters
     ----------
     fetch : pd.Series
         Series containing fetch, with direction as index labels.
@@ -97,9 +97,9 @@ def effective_fetch(fetch:pd.Series,
         wind_direction = wind_direction.values
 
     T = len(wind_direction)
-    N = int(sector/np.mean(np.diff(fetch.index))) # number of indices within 180 degree sector
+    N = int(sector/np.mean(np.diff(fetch.index))) # number of indices within sector
 
-    # Normalized absolute difference between fetch and wind direction (T x 2N)
+    # Normalized absolute difference between fetch and wind direction (T x 360)
     norm_dir = (fetch_dir[np.newaxis,:] - wind_direction[:,np.newaxis])%360
     abs_diff = np.minimum(norm_dir, 360 - norm_dir)
 
@@ -117,16 +117,17 @@ def effective_fetch(fetch:pd.Series,
     return effective_fetch
 
 
-def fetch_laws(wind,
-               fetch,
-               depth = 1e6,
-               laws = 'holthuijsen'):
+def fetch_laws(
+        wind,
+        fetch,
+        depth = 1e6,
+        laws = 'holthuijsen'):
     """
     Calculate Hs, Tp and other parameters based on wind speed and fetch according to traditional fetch laws.
 
     References: Holthuijsen (2006), Kahma & Calkoen (1992), JONSWAP (1973).
 
-    Arguments
+    Parameters
     ---------
     wind : float or np.ndarray or pd.Series
         Wind speed [m/s]. If series, the return is a dataframe of wave parameters. 
@@ -140,8 +141,9 @@ def fetch_laws(wind,
     
     Returns
     --------
-    wave_parameters : dict or pd.DataFrame
+    dict or pd.DataFrame
         The wave parameters. DataFrame will be used if the input wind speed is a pandas Series.
+        Which parameters depends on the fetch laws used.
 
     """
     
@@ -153,11 +155,11 @@ def fetch_laws(wind,
         return_df = False
 
     if laws.lower() == 'holthuijsen':
-        wave_parameters = fetch_law_Holthuijsen(wind,fetch,depth)
+        wave_parameters = fetch_law_Holthuijsen(wind=wind,fetch=fetch,depth=depth)
     elif laws.lower() == 'kahmacalkoen':
-        wave_parameters = fetch_law_KahmaCalkoen(wind,fetch)
+        wave_parameters = fetch_law_KahmaCalkoen(wind_speed=wind,fetch=fetch)
     elif laws.lower() == 'jonswap':
-        wave_parameters = fetch_law_JONSWAP(wind,fetch)
+        wave_parameters = fetch_law_JONSWAP(wind_speed=wind,fetch=fetch)
     else:
         raise ValueError(f'Unknown law {laws}.')
 
@@ -167,13 +169,15 @@ def fetch_laws(wind,
         return wave_parameters
 
 
-def fetch_law_Holthuijsen(wind,fetch=1e6,depth=1e6):
+def fetch_law_Holthuijsen(
+        wind,
+        fetch=1e6,
+        depth=1e6):
     '''
     Calculate wind from wind speed [m/s], water depth [m], and fetch distance [m],
-    using the equations of Holthuijsen, 2007, note 8B. The equations are considered
-    equally valid for any depth or fetch, but consider only fetch in one direction.
+    using the equations of Breugem & Holthuijsen (2006).
     
-    Arguments
+    Parameters
     ---------
     wind : float or array.
         The wind speed, in m/s. 
@@ -225,23 +229,18 @@ def fetch_law_KahmaCalkoen(
     """
     Calculates wave parameters from wind speed (m/s) and fetch (m) given Kahma & Calkoen (1992) composite curves.
 
-    Arguments
+    Parameters
     ----------
     fetch : np.ndarray
         Fetch distance [m]
     wind_speed : np.ndarray
-        Wind speed [m]
+        Wind speed [m/s]
 
-    Returns
-    --------
-    parameters : dict
-        Dict with arrays for wave parameters.
-
-    Reference
+    Notes
     ---------
-    Kahma, K. K., and C. J. Calkoen, 1992: Reconciling Discrepancies in the Observed Growth of
-    Wind-generated Waves. J. Phys. Oceanogr., 22, 1389-1405,
-    https://doi.org/10.1175/1520-0485(1992)022<1389:RDITOG>2.0.CO;2.
+        Kahma, K. K., and C. J. Calkoen, 1992: Reconciling Discrepancies in the Observed Growth of
+        Wind-generated Waves. J. Phys. Oceanogr., 22, 1389-1405,
+        https://doi.org/10.1175/1520-0485(1992)022<1389:RDITOG>2.0.CO;2.
 
     """
 
@@ -279,10 +278,21 @@ def fetch_law_KahmaCalkoen(
         'peak_wavenumber': kp
     }
 
-def fetch_law_JONSWAP(wind_speed, fetch):
+def fetch_law_JONSWAP(
+        wind_speed, 
+        fetch):
     """
     Calculate wind-generated waves according to
     JONSWAP (Hasselmann et. al. 1973).
+
+    Parameters
+    ----------
+    wind_speed : np.ndarray
+        Wind speed [m/s]
+    fetch : np.ndarray
+        Fetch [m]
+
+    
     """
     g = 9.81
     Hs = 0.0016*np.power(g,-0.5)*np.power(fetch,0.5)*wind_speed
