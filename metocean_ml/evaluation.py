@@ -18,11 +18,7 @@ def error_metrics_1D(target,pred):
     Returns
     -------
     dict
-        A dictionary with the calculated metrics:
-        - "mse" : Mean Squared Error
-        - "mae" : Mean Absolute Error
-        - "r2" : R-squared score
-        - "rmse" : Root Mean Squared Error
+        A dictionary with the calculated metrics
     '''
     return {
         "mse": mean_squared_error(target, pred),
@@ -49,14 +45,12 @@ def spec_prediction_performance(spec_pred, spec_target, freq, dir,upsample=1000)
         The upsampling factor for the spectral data, by default 1000.
     Returns
     -------
-    tuple
-        A tuple containing:
-        - params_pred : dict
-            A dictionary of the integrated predicted parameters.
-        - params_target : dict
-            A dictionary of the integrated target parameters.
-        - pd.DataFrame
-            A DataFrame containing the calculated error metrics for each parameter.
+    params_pred : dict
+        A dictionary of the integrated predicted parameters.
+    params_target : dict
+        A dictionary of the integrated target parameters.
+    pd.DataFrame
+        A DataFrame containing the calculated error metrics for each parameter.
     
     Notes
     -----
