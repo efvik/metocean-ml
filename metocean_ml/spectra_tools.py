@@ -4,26 +4,17 @@ import pandas as pd
 from scipy.interpolate import CubicSpline, RegularGridInterpolator, interp1d
 from scipy.integrate import simpson
 from tqdm import tqdm
-
-def _interpolate_linear(fp,n):
-    '''
-    Linear interpolation.
-    '''
-    l = len(fp)
-    x = np.linspace(0,l-1,n)
-    xp = np.arange(l)
-    return np.interp(x,xp,fp)
-
-def _interpolate_direction(fp,n):
-    '''
-    Linear interpolation of directions.
-    '''
-    x = np.linspace(0,360,n,endpoint=False)
-    return interp1d(fp,fp,kind="linear",fill_value="extrapolate")(x)
     
 def _interpolate_cubic(fp,n):
     '''
-    Cubic spline interpolation.
+    Cubic spline interpolation within the range of fp, for resampling.
+
+    Parameters
+    ----------
+    fp : np.ndarray
+        Values of the function
+    n : int
+        New sampling resolution.
     '''
     l = len(fp)
     x = np.linspace(0,l-1,n)
@@ -41,7 +32,7 @@ def interpolate_2D_spec(spec  : np.ndarray,
     '''
     Interpolate 2D wave spectra from fre0 and dir0 to freq1 and dir1.
     
-    Arguments
+    Parameters
     ---------
     spec : np.ndarray
         N-D array of spectra, must have dimensions [..., frequencies, directions].
@@ -87,7 +78,7 @@ def scale_2D_spec(  spec:np.ndarray,
     '''
     Interpolate wave spectra to a new set of specific frequencies and directions.
     
-    Arguments:
+    Parameters
     ----------
     spec : np.ndarray
         Array of spectra, with last two dimensions corresponding to frequencies and directions in order.
@@ -103,7 +94,7 @@ def scale_2D_spec(  spec:np.ndarray,
         Any interpolation method allowed by scipy's RegularGridInterpolator, such as 
         "nearest", "linear", "cubic", "quintic".
 
-    Returns:
+    Returns
     --------
     new_spec : np.ndarray 
         Interpolated spectra, array with same shape as input spectra except the last two dimensions.
@@ -112,17 +103,15 @@ def scale_2D_spec(  spec:np.ndarray,
     new_directions : np.ndarray
         The new set of directions.
     '''
-    
+
+    new_frequencies = np.array(new_frequencies)
+    new_directions = np.array(new_directions)
     
     # Create freqs and dirs through interpolation if not supplied directly
-    if hasattr(new_frequencies, "__len__"):
-        new_frequencies = np.array(new_frequencies)
-    else:
+    if new_frequencies.size == 1:
         new_frequencies = _interpolate_cubic(frequencies,new_frequencies)
-    if hasattr(new_directions,"__len__"):
-        new_directions = np.array(new_directions)
-    else:
-        new_directions = _interpolate_direction(directions,new_directions)
+    if new_directions.size == 1:
+        new_directions = np.linspace(0,360,new_directions,endpoint=False)
 
     new_spec = interpolate_2D_spec(spec,frequencies,directions,new_frequencies,new_directions,method=method)
     return new_spec, new_frequencies, new_directions
@@ -137,7 +126,7 @@ def interpolate_dataarray_spec( spec: xr.DataArray,
     The last two dimensions of spec must represent frequencies and directions.
     This is just a wrapper for scale_2D_spec, to keep track of the dataarray metadata.
     
-    Arguments
+    Parameters
     ---------
     spec : xr.DataArray
         Array of spectra. Must have dimensions [..., frequencies, directions].
@@ -177,15 +166,30 @@ def interpolate_dataarray_spec( spec: xr.DataArray,
 
 def _reshape_spectra(spec, frequencies, directions):
     '''
-    Reshape [..., frequencies*directions] into [..., frequencies, directions].
+    Standardize format of spectra, frequencies and directions for further processing.
+
+    Parameters
+    ----------
+    spec : np.ndarray or pd.DataFrame or xr.DataArray
+        Array of spectra.
+    frequencies : np.ndarray
+        List of freqency values corresponding to the second-last dimension of the spectra.
+    directions : np.ndarray
+        List of directions corresponding to the last dimension of the spectra.
+
+    Returns
+    -------
+    np.ndarray
+        Spectra shape [.., frequencies, dimensions]
+    np.ndarray
+        Frequencies
+    np.ndarray
+        Directions
     '''
-        # Make sure all arrays are numpy.
-    if isinstance(spec, xr.DataArray):
-        spec = spec.data
-    if isinstance(frequencies, xr.DataArray):
-        frequencies = frequencies.data
-    if isinstance(directions, xr.DataArray):
-        directions = directions.data
+    # Make sure all arrays are numpy.
+    spec = np.array(spec)
+    frequencies = np.array(frequencies)
+    directions = np.array(directions)
 
     # Check if spec values and shape are OK
     if np.any(spec < 0):
@@ -215,7 +219,7 @@ def integrated_parameters(
 
     Implemented: Hs, peak dir, peak freq.
     
-    Arguments
+    Parameters
     ---------
     spec : np.ndarray or xr.DataArray
         An array of spectra. The shape must be either 
@@ -272,12 +276,31 @@ def integrated_parameters(
 def peak_freq_dir(spec:np.ndarray,
                   frequencies:np.ndarray,
                   directions:np.ndarray,
-                  upsample:int=0):
+                  upsample:int=1000):
     '''
     Method to calculate peak freq and dir by 
     (1) integrating to obtain 1D spectra,
     (2) optionally upsampling the 1D spectra using cubic splines,
     (3) finding the largest value on the upsampled spectras
+
+    Parameters
+    ----------
+    spec : np.ndarray
+        Some array of spectra.
+    frequencies : np.ndarray
+        Frequencies corresponding to the second-last dimension of the spectra.
+    directions : np.ndarray
+        Directions corresponding to the last dimension of the spectra.
+    upsample : int
+        Upsample the frequency spectra and direction spectra via 
+        cubic splines, for higher resolution of the peak values.
+
+    Returns
+    -------
+    peak_freq : np.ndarray
+        Peak frequency, shape corresponding to the number of input spectra.
+    peak_dir : np.ndarray
+        Peak directions, shape corresponding to the number of input spectra.
     '''
     
     freq_spec, frequencies = frequency_spectra(spec,frequencies,directions)
@@ -307,7 +330,7 @@ def frequency_spectra(
     '''
     Get frequency spectra by integrating over directions.
     
-    Arguments
+    Parameters
     ---------
     spec : np.ndarray or xr.DataArray
         An array of spectra. The shape must be either 
@@ -322,7 +345,6 @@ def frequency_spectra(
     1D_spec : np.ndarray or xr.DataArray
         Array of 1D spectra.
     '''
-    was_dataarray = True if type(spec) == xr.DataArray else False
 
     spec, frequencies, directions = _reshape_spectra(spec,frequencies,directions)
     
@@ -348,7 +370,7 @@ def direction_spectra(
     '''
     Get direction spectra by integrating frequencies.
     
-    Arguments
+    Parameters
     ---------
     spec : np.ndarray or xr.DataArray
         An array of spectra. The shape must be either 
@@ -363,7 +385,6 @@ def direction_spectra(
     1D_spec : np.ndarray or xr.DataArray
         Array of 1D spectra.
     '''
-    was_dataarray = True if type(spec) == xr.DataArray else False
 
     spec, frequencies, directions = _reshape_spectra(spec,frequencies,directions)
     
@@ -380,10 +401,25 @@ def direction_spectra(
 
 def directional_spec_info(spec:xr.DataArray,
                           directions=360,
-                          upsample=1000,
                           directions_from_energy = True,
                           energy_smoothing=0.1):
-    '''Calculate parameters for each direction, such as Tp, freq, group velocity, energy.'''
+    '''
+    Calculate parameters for each direction, such as Tp, freq, group velocity, energy.
+    Works by interpolating spectra to the chosen number of directions,
+    then calculating the integrated parameters for each direction seperately.
+
+    spec : xr.DataArray 
+        Spectra array where the two last dimensions are frequency and direction.
+    directions : int or np.ndarray
+        Number of directions, or a list of specific directions.
+    directions_from_energy : bool, default True
+        This option allows directions to be distributed with density according
+        to the spectral energy density. Used if directions is an integer.
+    energy_smoothing : float
+        Adjustment of the directions-from-energy algorithm, if used. 
+        Higher value will distribute more uniformly while still according to density.
+    '''
+
     if not isinstance(spec,xr.DataArray): raise TypeError("Spec must be dataarray.")
     if "time" in spec.dims: spec = spec.mean("time")
     if len(spec.dims)!=2: raise TypeError("Unknown spectra shape. Expected [time, freq, dir] or [freq, dir].")
@@ -400,19 +436,20 @@ def directional_spec_info(spec:xr.DataArray,
         dir_spec = np.concatenate([boundary_value,dir_spec,boundary_value])
     energy_interpolator = CubicSpline(spec_dirs,dir_spec,bc_type="natural")
 
-    # Upscale, then distribute directions based on energy density (dirs) and find energy of these directions (energy_dirs)
-    xd = _interpolate_direction(spec[dim_dir].data,upsample)
     
     if isinstance(directions,int):
         if directions_from_energy:
+            # Upscale directional energy distribution, then distribute directions based on energy density.
+            xd = np.linspace(start=0,stop=360,num=10000,endpoint=False)
             dirspec = energy_interpolator(xd)
             density = dirspec + energy_smoothing
             dir_dist = density.cumsum()/density.sum()
-            dir_ind = dir_dist.searchsorted(np.linspace(0,1,directions+1)[:-1])
+            dir_ind = dir_dist.searchsorted(np.linspace(0,1,directions,endpoint=False))
             dirs = xd[dir_ind]
         else:
-            dirs = np.linspace(0,360,directions+1)[:-1]
+            dirs = np.linspace(0,360,directions,endpoint=False)
         dir_idx = np.arange(len(dirs))
+
     elif hasattr(directions,"__len__"):
         dirs = directions
         dir_idx = np.arange(len(dirs))

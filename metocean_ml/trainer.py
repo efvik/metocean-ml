@@ -8,10 +8,39 @@ from tqdm import tqdm
 
 class Trainer():
     """
-    A general trainer for pytorch models. You can set various parameters
-    in initialization trainer = Trainer(...), then use 
-    logs = trainer.fit(model, train_dataset, val_dataset) to train a model.
-    """
+    A general trainer for PyTorch models, designed to manage the training loop, 
+    including loss computation, early stopping, learning rate reduction, and more.
+
+    Parameters
+    ----------
+    train_lossfunc : torch.nn.Module, optional
+        The loss function used for training. Default is `torch.nn.L1Loss()`.
+    val_lossfunc : torch.nn.Module, optional
+        The loss function used for validation. Default is `torch.nn.L1Loss()`.
+    early_stopping_patience : int, optional
+        The number of epochs with no improvement on validation loss after which
+        training will be stopped. Default is 10.
+    reduce_lr_patience : int, optional
+        The number of epochs with no improvement on validation loss after which
+        the learning rate will be reduced. Default is 5.
+    minimum_lr : float, optional
+        The minimum learning rate to which the learning rate can be reduced. Default is `1e-8`.
+    improvement_threshold : float, optional
+        The threshold for considering the validation loss to have improved. Default is `1e-7`.
+    max_epochs : int, optional
+        The maximum number of epochs to train the model. Default is 100.
+    learning_rate : float, optional
+        The initial learning rate. Default is `0.0001`.
+    batch_size : int, optional
+        The batch size for training. Default is 1024 (2^10).
+    verbose : bool, optional
+        If True, provides detailed logging during training. Default is True.
+
+    Methods
+    -------
+    fit(model, train_dataset, val_dataset) :
+        Trains the model using the provided training and validation datasets.
+        Returns logs containing training information.    """
     def __init__(
             self,
             train_lossfunc:nn.Module = nn.L1Loss(),
@@ -40,23 +69,37 @@ class Trainer():
             model:nn.Module,
             train_data:DataLoader|Dataset,
             val_data:DataLoader|Dataset):
-        '''
-        Arguments:
-        ---------
-        model : nn.Module
-            Pytorch model.
-        train_dataset : DataLoader or Dataset
-            Training dataset.
-        val_dataset DataLoader or Dataset
-            Validation dataset.
-        
-        Returns:
-        --------
+        """
+        Trains the provided PyTorch model using the given training and validation datasets. 
+        The method handles the training loop, validation, loss computation, early stopping, 
+        and learning rate adjustments.
+
+        Parameters
+        ----------
+        model : torch.nn.Module
+            The PyTorch model to be trained.
+        train_data : torch.utils.data.DataLoader or torch.utils.data.Dataset
+            The training dataset. If a `Dataset` is provided, it will be wrapped in a `DataLoader`.
+        val_data : torch.utils.data.DataLoader or torch.utils.data.Dataset
+            The validation dataset. If a `Dataset` is provided, it will be wrapped in a `DataLoader`.
+
+        Returns
+        -------
         logs : dict
-            Training loss and validation loss per epoch.
-        '''
+            A dictionary containing the following keys:
+            - "train_loss" : A list of training loss values for each epoch.
+            - "val_loss" : A list of validation loss values for each epoch.
+            - "learning_rate" : A list of learning rates used during training.
+            
+        Notes
+        -----
+        - The method uses the Adam optimizer with an initial learning rate specified during initialization.
+        - Training will stop early if the validation loss does not improve for a specified number of epochs, 
+        as determined by `early_stopping_patience`. Additionally, the learning rate will be reduced if there 
+        is no improvement after `reduce_lr_patience` epochs.
+        - The learning rate will not be reduced below `minimum_lr`.
+        """
         train_loss_log = []
-        hs_train_loss_log = []
         val_loss_log = []
         lr_log = []
         best_loss = float("inf")
@@ -76,13 +119,10 @@ class Trainer():
             # Training loop
             model.train()
             train_loss = 0.0
-            hs_train_loss = 0.0
             for inputs, targets in train_data:
                 optimizer.zero_grad()
                 outputs = model(inputs).squeeze()
                 loss = self.train_lossfunc(outputs, targets)
-                #hs_loss = torch.abs(outputs.mean() - targets.mean())*2
-                #loss += hs_loss
                 loss.backward()
                 optimizer.step()
                 train_loss += loss.item() * inputs.size(0)
@@ -100,6 +140,7 @@ class Trainer():
                     val_loss += loss.item() * inputs.size(0)
             val_loss /= len(val_data.dataset)
             val_loss_log.append(val_loss)
+            
             # Info
             pbar.set_description('Epoch {}, Training loss: {}, validation loss: {}.'.format(epoch+1,round(train_loss,5),round(val_loss,5)))
 
@@ -132,7 +173,23 @@ class Trainer():
     def test(self,
              model:nn.Module,
              test_data:Dataset|DataLoader):
-        
+        """
+        Evaluates the provided PyTorch model on the test dataset.
+        The loss is computed using the validation loss function (`val_lossfunc`) specified during initialization.
+
+        Parameters
+        ----------
+        model : torch.nn.Module
+            The PyTorch model to be evaluated.
+        test_data : torch.utils.data.DataLoader or torch.utils.data.Dataset
+            The test dataset. If a `Dataset` is provided, it will be wrapped in a `DataLoader`.
+
+        Returns
+        -------
+        test_loss : float
+            The average test loss across all batches in the test dataset.
+
+                    """
         if isinstance(test_data,Dataset):
             test_data = DataLoader(test_data,batch_size=self.batch_size,shuffle=False)
         
