@@ -108,7 +108,7 @@ def merge_directions_points(points,directions,drop_duplicates="points",on_index=
     Add information from dataframe of directions with column dir_from,
     to a dataframe of points with column dir_from.
     
-    Arguments:
+    Parameters
     ----------
     points : pandas DataFrame
         DataFrame containing the points with "r" and "dir_from" columns.
@@ -122,8 +122,8 @@ def merge_directions_points(points,directions,drop_duplicates="points",on_index=
         Tolerance for merging points when merging on "dir_from". 
         Not being able to match rows within tolerance will raise an error.
 
-    Returns:
-    -------
+    Parameters
+    ----------
     pandas DataFrame
         Merged DataFrame with additional directional information.
     '''
@@ -162,7 +162,7 @@ def wave_properties_from_source_points(origin, spec, lat, lon):
     Add info from spec to a list of points given by lat and lon.
     Works by interpolating the spectra to the list of directions from origin to each point.
     
-    Arguments:
+    Parameters
     ----------
     origin : tuple
         Latitude and longitude of the origin point.
@@ -173,7 +173,7 @@ def wave_properties_from_source_points(origin, spec, lat, lon):
     lon : array-like
         Longitude values of the points.
 
-    Returns:
+    Returns
     -------
     pandas DataFrame
         DataFrame with added wave properties for each point.
@@ -198,7 +198,7 @@ def _create_wedge(center_lat, center_lon, dir_from, dir_to, radius_km, edge_reso
     """
     Create a wedge polygon centered at (center_lon, center_lat) with given direction, radius, and span.
     
-    Arguments:
+    Parameters
     ----------
     center_lat : float
         Latitude of the center of the wedge.
@@ -215,7 +215,7 @@ def _create_wedge(center_lat, center_lon, dir_from, dir_to, radius_km, edge_reso
     arc_resolution : int, optional, default=10
         Number of points along the arc.
 
-    Returns:
+    Returns
     -------
     shapely.geometry.Polygon
         A shapely Polygon object representing the wedge.
@@ -255,7 +255,7 @@ def line_of_sight_plot(center_lat,
     For a given location, with 'points' from e.g. wave_properties_from_source_points, 
     visualize the potential wave generating areas on a map.
     
-    Arguments:
+    Parameters
     ----------
     center_lat : float
         Latitude of the center point.
@@ -274,7 +274,7 @@ def line_of_sight_plot(center_lat,
     alpha : float, optional, default=0.75
         Transparency level for the colored sectors.
 
-    Returns:
+    Returns
     -------
     fig, ax : matplotlib.figure.Figure, matplotlib.axes.Axes
         The figure and axis for the plot.

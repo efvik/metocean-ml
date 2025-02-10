@@ -36,11 +36,7 @@ class Trainer():
     verbose : bool, optional
         If True, provides detailed logging during training. Default is True.
 
-    Methods
-    -------
-    fit(model, train_dataset, val_dataset) :
-        Trains the model using the provided training and validation datasets.
-        Returns logs containing training information.    """
+    """
     def __init__(
             self,
             train_lossfunc:nn.Module = nn.L1Loss(),
@@ -86,18 +82,8 @@ class Trainer():
         Returns
         -------
         logs : dict
-            A dictionary containing the following keys:
-            - "train_loss" : A list of training loss values for each epoch.
-            - "val_loss" : A list of validation loss values for each epoch.
-            - "learning_rate" : A list of learning rates used during training.
-            
-        Notes
-        -----
-        - The method uses the Adam optimizer with an initial learning rate specified during initialization.
-        - Training will stop early if the validation loss does not improve for a specified number of epochs, 
-        as determined by `early_stopping_patience`. Additionally, the learning rate will be reduced if there 
-        is no improvement after `reduce_lr_patience` epochs.
-        - The learning rate will not be reduced below `minimum_lr`.
+            A dictionary containing logs of train_loss, val_loss, learning_rate.
+    
         """
         train_loss_log = []
         val_loss_log = []
@@ -189,7 +175,7 @@ class Trainer():
         test_loss : float
             The average test loss across all batches in the test dataset.
 
-                    """
+        """
         if isinstance(test_data,Dataset):
             test_data = DataLoader(test_data,batch_size=self.batch_size,shuffle=False)
         

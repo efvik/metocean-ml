@@ -408,6 +408,8 @@ def directional_spec_info(spec:xr.DataArray,
     Works by interpolating spectra to the chosen number of directions,
     then calculating the integrated parameters for each direction seperately.
 
+    Parameters
+    ----------
     spec : xr.DataArray 
         Spectra array where the two last dimensions are frequency and direction.
     directions : int or np.ndarray
@@ -418,6 +420,11 @@ def directional_spec_info(spec:xr.DataArray,
     energy_smoothing : float
         Adjustment of the directions-from-energy algorithm, if used. 
         Higher value will distribute more uniformly while still according to density.
+
+    Returns
+    -------
+    pd.DataFrame
+        Dataframe with one row per direction, and associated metadata extracted from the spectrum.
     '''
 
     if not isinstance(spec,xr.DataArray): raise TypeError("Spec must be dataarray.")

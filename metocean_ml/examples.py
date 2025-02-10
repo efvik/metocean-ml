@@ -30,7 +30,7 @@ def spectra_prediction_model(
     The full timeseries of spec_origin is then used to predict spec_target for the full timeseries.
     
     Parameters
-    ------
+    ----------
     spec_origin : xarray.DataArray 
         Spectra timeseries from the origin
     target_freq_var : str
@@ -125,9 +125,15 @@ def spectra_prediction_model(
 def train_model(train_input: np.ndarray, train_target: np.ndarray,
                 model_type: str = "linear", random_state:int=42):
     '''
-    train_input: [time, station, frequency, direction]
-    train_target: [time, frequency, direction]
-    model_type: ("linear", "ridge", "lasso", "elasticnet", 
+
+    Parameters
+    -----------
+    train_input : np.ndarray
+        Input data
+    train_target: np.ndarray
+        Target data
+    model_type: str
+        One of ("linear", "ridge", "lasso", "elasticnet", 
                 "random_forest", "gradient_boosting", "svr", "mlp")
     '''
     
