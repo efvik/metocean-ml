@@ -7,7 +7,7 @@ import matplotlib.colors as mcolors
 import pyproj
 import shapely
 from tqdm import tqdm
-import spectra_tools
+from . import spectra_tools
 
 from roaring_landmask import RoaringLandmask
 from roaring_landmask import LandmaskProvider
