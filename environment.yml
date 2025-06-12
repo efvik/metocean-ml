@@ -2,7 +2,7 @@ name: metocean-ml
 channels:
   - conda-forge
 dependencies:
-  - python=>3.9
+  - python=>3.9,<3.13
   - xarray
   - matplotlib
   - numpy
@@ -18,3 +18,5 @@ dependencies:
   - pyproj
   - contextily
   - geopandas
+  - skorch
+  - netCDF4
